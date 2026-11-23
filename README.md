@@ -1,5 +1,27 @@
 # Roborock Custom Map
 
+> [!NOTE]
+> **This is a fork of [Lash-L/RoborockCustomMap](https://github.com/Lash-L/RoborockCustomMap)** that adds
+> **custom room and vacuum path colors**.
+>
+> With the stock palette some rooms are almost the same color as the vacuum path
+> (room 2 is `(133, 193, 233)`, the path is `(147, 194, 238)`), so you can't tell where the
+> vacuum has already been. This fork lets you pick a color for every room and for the path
+> from the integration's options — see [Room and Path Colors](#room-and-path-colors).
+>
+> - Based on the upstream `main` branch (the unreleased 0.2.0 code, newer than the 0.1.6 release).
+> - Everything else works exactly like upstream; the map is re-rendered with the same settings
+>   as the core integration, so size and calibration don't change.
+> - Adds an Italian translation.
+> - Same `roborock_custom_map` domain: it **replaces** the upstream integration (remove that one
+>   from HACS first, your configuration and entities are kept).
+>
+> **Install via HACS:** add `https://github.com/matteorossininchi/RoborockCustomMap` as a custom
+> repository (category *Integration*), download it and restart Home Assistant.
+>
+> All credit for the integration goes to [@Lash-L](https://github.com/Lash-L); if the feature is
+> accepted upstream, please go back to the original repository.
+
 you MUST be on 2025.12.1 or later
 
 This allows you to use the core Roborock integration with the [Xiaomi Map Card](https://github.com/PiotrMachowski/lovelace-xiaomi-vacuum-map-card)
