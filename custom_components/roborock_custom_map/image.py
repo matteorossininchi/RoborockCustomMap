@@ -35,6 +35,7 @@ from .const import (
     CONF_FILE,
     CONF_FILE_HASH,
     CONF_MAP_COLORS,
+    CONF_PATH_COLOR,
     DEFAULT_MAP_ROTATION,
     MAP_ROTATION_OPTIONS,
     get_map_rotation,
@@ -143,7 +144,7 @@ class RoborockMap(RoborockCoordinatedEntityV1, ImageEntity):
 
         self.cached_map = b""
         self._raw_image_size: tuple[int, int] | None = None
-        self._overlay_cache: tuple[bytes, Image.Image] | None = None
+        self._overlay_cache: tuple[tuple, Image.Image] | None = None
         self._mask_cache: tuple[bytes, Image.Image] | None = None
         self._layers_generation = 0
         self._bg_cache: tuple[tuple[str, str], bytes] | None = None
@@ -268,12 +269,21 @@ class RoborockMap(RoborockCoordinatedEntityV1, ImageEntity):
         ]
 
     async def _async_get_overlay(self, raw: bytes) -> Image.Image:
-        """Return the parsed drawables overlay, re-parsing when raw changed."""
-        if self._overlay_cache is None or self._overlay_cache[0] != raw:
+        """Return the parsed drawables overlay, re-parsing when raw or path color changed."""
+        record = self.config_entry.options.get(CONF_MAP_COLORS, {}).get(
+            self.rotation_key
+        ) or {}
+        path_color = record.get(CONF_PATH_COLOR)
+        cache_key = (raw, tuple(path_color) if path_color else None)
+        if self._overlay_cache is None or self._overlay_cache[0] != cache_key:
             overlay = await self.hass.async_add_executor_job(
-                map_render.build_overlay, raw, self._core_drawables(), MAP_SCALE
+                map_render.build_overlay,
+                raw,
+                self._core_drawables(),
+                MAP_SCALE,
+                path_color,
             )
-            self._overlay_cache = (raw, overlay)
+            self._overlay_cache = (cache_key, overlay)
             self._layers_generation += 1
         return self._overlay_cache[1]
 

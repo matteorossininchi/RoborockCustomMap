@@ -26,7 +26,7 @@
       },
       "colors": {
         "title": "Room and path colors",
-        "description": "Pick a color for each room and for the vacuum path. Colors left at their default are not stored. Only applies to the map without a Custom Floor Plan.",
+        "description": "Pick a color for each room and for the vacuum path. Colors left at their default are not stored. Room colors apply to the normal map; the path color also applies on top of a Custom Floor Plan.",
         "data": {
           "path": "Vacuum path",
           "reset_colors": "Restore all default colors"

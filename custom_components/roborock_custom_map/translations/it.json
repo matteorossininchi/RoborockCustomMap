@@ -26,7 +26,7 @@
       },
       "colors": {
         "title": "Colori delle stanze e del percorso",
-        "description": "Scegli un colore per ogni stanza e per il percorso del robot. I colori lasciati al valore predefinito non vengono salvati. Vale solo per la mappa senza planimetria personalizzata.",
+        "description": "Scegli un colore per ogni stanza e per il percorso del robot. I colori lasciati al valore predefinito non vengono salvati. I colori delle stanze valgono per la mappa normale; il colore del percorso vale anche sopra la planimetria personalizzata.",
         "data": {
           "path": "Percorso del robot",
           "reset_colors": "Ripristina tutti i colori predefiniti"

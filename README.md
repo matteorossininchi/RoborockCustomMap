@@ -84,8 +84,8 @@ You can pick your own colors per map:
 
 The map is re-rendered from the raw map data with the same settings as the core
 integration (including its *Show background / walls / rooms* options), so its size
-and calibration points do not change. Colors apply to the normal map, not to a
-Custom Floor Plan.
+and calibration points do not change. Room colors apply to the normal map; the
+path color is also used on top of a Custom Floor Plan.
 
 ### Installation
 

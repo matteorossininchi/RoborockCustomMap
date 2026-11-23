@@ -26,7 +26,7 @@
       },
       "colors": {
         "title": "Farben für Räume und Pfad",
-        "description": "Wähle eine Farbe für jeden Raum und für den Pfad des Saugroboters. Unveränderte Standardfarben werden nicht gespeichert. Gilt nur für die Karte ohne eigenen Grundriss.",
+        "description": "Wähle eine Farbe für jeden Raum und für den Pfad des Saugroboters. Unveränderte Standardfarben werden nicht gespeichert. Raumfarben gelten für die normale Karte; die Pfadfarbe gilt auch über einem eigenen Grundriss.",
         "data": {
           "path": "Pfad des Saugroboters",
           "reset_colors": "Alle Standardfarben wiederherstellen"

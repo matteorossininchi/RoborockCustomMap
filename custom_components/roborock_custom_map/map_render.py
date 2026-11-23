@@ -74,11 +74,12 @@ def _transparent_room_colors() -> dict[str, Color]:
     return dict.fromkeys(ColorsPalette.ROOM_COLORS, _TRANSPARENT)
 
 
-def _overlay_palette() -> ColorsPalette:
+def _overlay_palette(path_color: Color | list[int] | None = None) -> ColorsPalette:
     """Palette rendering only drawables: all base pixels transparent."""
-    return ColorsPalette(
-        dict.fromkeys(_BASE_COLORS, _TRANSPARENT), _transparent_room_colors()
-    )
+    colors: dict[SupportedColor, Color] = dict.fromkeys(_BASE_COLORS, _TRANSPARENT)
+    if path_color is not None:
+        colors[SupportedColor.PATH] = _rgb(path_color)
+    return ColorsPalette(colors, _transparent_room_colors())
 
 
 def _mask_palette() -> ColorsPalette:
@@ -174,9 +175,20 @@ def build_colored_map(
     return out.getvalue()
 
 
-def build_overlay(raw: bytes, drawables: list[Drawable], map_scale: int) -> Image.Image:
-    """Parse the raw map into an RGBA layer containing only the drawables."""
-    overlay_map = _create_parser(_overlay_palette(), drawables, map_scale).parse(raw)
+def build_overlay(
+    raw: bytes,
+    drawables: list[Drawable],
+    map_scale: int,
+    path_color: Color | list[int] | None = None,
+) -> Image.Image:
+    """Parse the raw map into an RGBA layer containing only the drawables.
+
+    path_color is the user's custom vacuum path color (if any), so it also
+    applies on top of a Custom Floor Plan.
+    """
+    overlay_map = _create_parser(
+        _overlay_palette(path_color), drawables, map_scale
+    ).parse(raw)
     if overlay_map.image is None:
         raise ValueError("Raw map data could not be rendered")
     return overlay_map.image.data.convert("RGBA")
