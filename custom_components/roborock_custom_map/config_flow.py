@@ -30,9 +30,12 @@ from homeassistant.helpers.selector import (
 
 from . import map_render
 from .const import (
+    CARPET_OPTIONS,
+    CARPETS_APP,
     CONF_ANCHOR_VX,
     CONF_ANCHOR_VY,
     CONF_BG_OVERRIDES,
+    CONF_CARPETS,
     CONF_CONFIRM,
     CONF_FILE,
     CONF_FILE_HASH,
@@ -266,7 +269,9 @@ class OptionsFlowHandler(OptionsFlow):
                     rgb = [int(c) for c in value[:3]]
                     if tuple(rgb) != map_render.default_room_color(number):
                         new_rooms[str(number)] = rgb
-                new_record = {}
+                new_record = {
+                    CONF_CARPETS: user_input.get(CONF_CARPETS, CARPETS_APP)
+                }
                 if new_rooms:
                     new_record[CONF_ROOM_COLORS] = new_rooms
                 if (path := user_input.get(CONF_PATH_COLOR)) is not None:
@@ -290,6 +295,15 @@ class OptionsFlowHandler(OptionsFlow):
             schema[vol.Optional(field, default=list(current))] = ColorRGBSelector()
         path = record.get(CONF_PATH_COLOR) or map_render.default_path_color()
         schema[vol.Optional(CONF_PATH_COLOR, default=list(path))] = ColorRGBSelector()
+        schema[
+            vol.Optional(CONF_CARPETS, default=record.get(CONF_CARPETS, CARPETS_APP))
+        ] = SelectSelector(
+            SelectSelectorConfig(
+                options=list(CARPET_OPTIONS),
+                mode=SelectSelectorMode.LIST,
+                translation_key=CONF_CARPETS,
+            )
+        )
         schema[vol.Optional(CONF_RESET_COLORS, default=False)] = bool
 
         return self.async_show_form(
@@ -309,7 +323,7 @@ class OptionsFlowHandler(OptionsFlow):
         room_map = getattr(getattr(home, "_rooms_trait", None), "room_map", {}) or {}
 
         fields: list[tuple[int, str]] = []
-        used: set[str] = {CONF_PATH_COLOR, CONF_RESET_COLORS}
+        used: set[str] = {CONF_PATH_COLOR, CONF_RESET_COLORS, CONF_CARPETS}
         for number in sorted(rooms):
             info = room_map.get(number)
             label = (getattr(info, "name", None) or f"Room {number}").strip()

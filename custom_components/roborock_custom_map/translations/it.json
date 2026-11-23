@@ -29,7 +29,8 @@
         "description": "Scegli un colore per ogni stanza e per il percorso del robot. I colori lasciati al valore predefinito non vengono salvati. I colori delle stanze valgono per la mappa normale; il colore del percorso vale anche sopra la planimetria personalizzata.",
         "data": {
           "path": "Percorso del robot",
-          "reset_colors": "Ripristina tutti i colori predefiniti"
+          "reset_colors": "Ripristina tutti i colori e le impostazioni predefinite",
+          "carpets": "Tappeti"
         }
       },
       "map_menu": {
@@ -97,6 +98,14 @@
           "180": "180°",
           "270": "270°"
         }
+      }
+    }
+  },
+  "selector": {
+    "carpets": {
+      "options": {
+        "app": "Come nell'app Roborock (scacchiera col colore della stanza, più scuro)",
+        "off": "Nascosti"
       }
     }
   }

@@ -29,7 +29,8 @@
         "description": "Pick a color for each room and for the vacuum path. Colors left at their default are not stored. Room colors apply to the normal map; the path color also applies on top of a Custom Floor Plan.",
         "data": {
           "path": "Vacuum path",
-          "reset_colors": "Restore all default colors"
+          "reset_colors": "Restore all default colors and settings",
+          "carpets": "Carpets"
         }
       },
       "map_menu": {
@@ -97,6 +98,14 @@
           "180": "180°",
           "270": "270°"
         }
+      }
+    }
+  },
+  "selector": {
+    "carpets": {
+      "options": {
+        "app": "Like the Roborock app (darker room color checkerboard)",
+        "off": "Hidden"
       }
     }
   }

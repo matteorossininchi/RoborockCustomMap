@@ -31,6 +31,10 @@ CONF_MAP_COLORS = "map_colors"
 CONF_ROOM_COLORS = "rooms"
 CONF_PATH_COLOR = "path"
 CONF_RESET_COLORS = "reset_colors"
+CONF_CARPETS = "carpets"
+CARPETS_APP = "app"
+CARPETS_OFF = "off"
+CARPET_OPTIONS = (CARPETS_APP, CARPETS_OFF)
 
 DATA_PREVIEW_SESSIONS = "preview_sessions"
 DATA_LAST_BG_OVERRIDES = "last_bg_overrides"

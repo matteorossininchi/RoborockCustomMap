@@ -25,6 +25,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import STORAGE_DIR
 
 from .const import (
+    CARPETS_APP,
+    CONF_CARPETS,
     CONF_PATH_COLOR,
     CONF_ROOM_COLORS,
     DOMAIN,
@@ -154,6 +156,96 @@ def colors_palette(
     return ColorsPalette(colors, rooms)
 
 
+# Submap bits (one byte per map pixel). The parser only knows CARPET=1; Saros
+# models mark carpets with bit 4 instead, so both are treated as carpet here.
+_SUBMAP_CARPET_BITS = 0x01 | 0x04
+_SUBMAP_REMOVED_BITS = 0x08 | 0x10
+_BLOCK_IMAGE = 2
+_BLOCK_SUBMAP = 17
+_CARPET_SHADE = 0.8
+
+
+def _int16(data: bytes, pos: int) -> int:
+    return int.from_bytes(data[pos : pos + 2], "little")
+
+
+def _int32(data: bytes, pos: int) -> int:
+    return int.from_bytes(data[pos : pos + 4], "little", signed=True)
+
+
+def carpet_cells(raw: bytes) -> tuple[int, int, set[tuple[int, int]]] | None:
+    """(width, height, carpet cells) in image coordinates, or None when absent.
+
+    Cells use the parser's orientation: x = column, y = row counted from the top
+    of the rendered image (the raw rows are stored bottom-up).
+    """
+    pos = _int16(raw, 0x02)
+    width = height = None
+    submap: bytes | None = None
+    while pos + 8 <= len(raw):
+        header_length = _int16(raw, pos + 0x02)
+        block_type = _int16(raw, pos)
+        data_length = _int32(raw, pos + 0x04)
+        if header_length <= 0 or data_length < 0:
+            break
+        data_start = pos + header_length
+        if block_type == _BLOCK_IMAGE:
+            header = raw[pos : pos + header_length]
+            height = _int32(header, header_length - 8)
+            width = _int32(header, header_length - 4)
+        elif block_type == _BLOCK_SUBMAP:
+            submap = raw[data_start : data_start + data_length]
+        pos = data_start + data_length
+    if not width or not height or not submap:
+        return None
+    cells: set[tuple[int, int]] = set()
+    for idx, value in enumerate(submap[: width * height]):
+        if value & _SUBMAP_CARPET_BITS and not value & _SUBMAP_REMOVED_BITS:
+            cells.add((idx % width, height - 1 - idx // width))
+    return width, height, cells
+
+
+def paint_carpets(image: Image.Image, raw: bytes, map_scale: int) -> Image.Image:
+    """Draw carpets like the Roborock app: a checkerboard of the room color, darker.
+
+    Only cells on the "odd" squares are darkened (same pattern the parser uses);
+    their color is taken from the neighbouring square, so it follows the room
+    color and also replaces the parser's own green carpet squares.
+    """
+    found = carpet_cells(raw)
+    if found is None:
+        return image
+    width, height, cells = found
+    if not cells or image.size != (width * map_scale, height * map_scale):
+        return image
+    image = image.convert("RGBA")
+    px = image.load()
+    half = map_scale // 2
+    for x, y in cells:
+        if not (x + y) % 2:
+            continue
+        base = None
+        for nx in (x + 1, x - 1):
+            if 0 <= nx < width:
+                color = px[nx * map_scale + half, y * map_scale + half]
+                if color[3] > 0:
+                    base = color
+                    break
+        if base is None:
+            continue
+        shaded = (
+            int(base[0] * _CARPET_SHADE),
+            int(base[1] * _CARPET_SHADE),
+            int(base[2] * _CARPET_SHADE),
+            base[3],
+        )
+        x0, y0 = x * map_scale, y * map_scale
+        for dy in range(map_scale):
+            for dx in range(map_scale):
+                px[x0 + dx, y0 + dy] = shaded
+    return image
+
+
 def build_colored_map(
     raw: bytes,
     drawables: list[Drawable],
@@ -164,14 +256,31 @@ def build_colored_map(
     """Re-render the raw map like the core integration, but with custom colors.
 
     Uses the same parser settings as the core Roborock integration, so the image
-    size (and therefore the calibration points) stays identical.
+    size (and therefore the calibration points) stays identical. With carpets in
+    "app" style the floor is rendered first, carpets are painted on it and the
+    drawables (path, vacuum, charger...) are composited on top.
     """
     palette = colors_palette(record, **(core_flags or {}))
-    parsed = _create_parser(palette, drawables, map_scale).parse(raw)
-    if parsed.image is None:
-        raise ValueError("Raw map data could not be rendered")
+    carpets = record.get(CONF_CARPETS, CARPETS_APP) == CARPETS_APP
+    if carpets and carpet_cells(raw) is not None:
+        floor = _create_parser(palette, [], map_scale).parse(raw)
+        if floor.image is None:
+            raise ValueError("Raw map data could not be rendered")
+        image = paint_carpets(floor.image.data.convert("RGBA"), raw, map_scale)
+        overlay = build_overlay(raw, drawables, map_scale, record.get(CONF_PATH_COLOR))
+        if overlay.size == image.size:
+            image.alpha_composite(overlay)
+        else:
+            image = None
+    else:
+        image = None
+    if image is None:
+        parsed = _create_parser(palette, drawables, map_scale).parse(raw)
+        if parsed.image is None:
+            raise ValueError("Raw map data could not be rendered")
+        image = parsed.image.data
     out = io.BytesIO()
-    parsed.image.data.save(out, format="PNG")
+    image.save(out, format="PNG")
     return out.getvalue()
 
 

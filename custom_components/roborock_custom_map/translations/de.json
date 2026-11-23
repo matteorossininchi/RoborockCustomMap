@@ -29,7 +29,8 @@
         "description": "Wähle eine Farbe für jeden Raum und für den Pfad des Saugroboters. Unveränderte Standardfarben werden nicht gespeichert. Raumfarben gelten für die normale Karte; die Pfadfarbe gilt auch über einem eigenen Grundriss.",
         "data": {
           "path": "Pfad des Saugroboters",
-          "reset_colors": "Alle Standardfarben wiederherstellen"
+          "reset_colors": "Alle Standardfarben und -einstellungen wiederherstellen",
+          "carpets": "Teppiche"
         }
       },
       "map_menu": {
@@ -97,6 +98,14 @@
           "180": "180° drehen",
           "270": "270° drehen"
         }
+      }
+    }
+  },
+  "selector": {
+    "carpets": {
+      "options": {
+        "app": "Wie in der Roborock-App (dunkleres Schachbrett in Raumfarbe)",
+        "off": "Ausgeblendet"
       }
     }
   }
