@@ -35,6 +35,7 @@ CONF_CARPETS = "carpets"
 CARPETS_APP = "app"
 CARPETS_OFF = "off"
 CARPET_OPTIONS = (CARPETS_APP, CARPETS_OFF)
+CONF_CLEANED_AREA = "cleaned_area"
 
 DATA_PREVIEW_SESSIONS = "preview_sessions"
 DATA_LAST_BG_OVERRIDES = "last_bg_overrides"

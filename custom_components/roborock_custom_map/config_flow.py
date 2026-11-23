@@ -36,6 +36,7 @@ from .const import (
     CONF_ANCHOR_VY,
     CONF_BG_OVERRIDES,
     CONF_CARPETS,
+    CONF_CLEANED_AREA,
     CONF_CONFIRM,
     CONF_FILE,
     CONF_FILE_HASH,
@@ -270,7 +271,8 @@ class OptionsFlowHandler(OptionsFlow):
                     if tuple(rgb) != map_render.default_room_color(number):
                         new_rooms[str(number)] = rgb
                 new_record = {
-                    CONF_CARPETS: user_input.get(CONF_CARPETS, CARPETS_APP)
+                    CONF_CARPETS: user_input.get(CONF_CARPETS, CARPETS_APP),
+                    CONF_CLEANED_AREA: user_input.get(CONF_CLEANED_AREA, True),
                 }
                 if new_rooms:
                     new_record[CONF_ROOM_COLORS] = new_rooms
@@ -304,6 +306,9 @@ class OptionsFlowHandler(OptionsFlow):
                 translation_key=CONF_CARPETS,
             )
         )
+        schema[
+            vol.Optional(CONF_CLEANED_AREA, default=record.get(CONF_CLEANED_AREA, True))
+        ] = bool
         schema[vol.Optional(CONF_RESET_COLORS, default=False)] = bool
 
         return self.async_show_form(
@@ -323,7 +328,9 @@ class OptionsFlowHandler(OptionsFlow):
         room_map = getattr(getattr(home, "_rooms_trait", None), "room_map", {}) or {}
 
         fields: list[tuple[int, str]] = []
-        used: set[str] = {CONF_PATH_COLOR, CONF_RESET_COLORS, CONF_CARPETS}
+        used: set[str] = {
+            CONF_PATH_COLOR, CONF_RESET_COLORS, CONF_CARPETS, CONF_CLEANED_AREA
+        }
         for number in sorted(rooms):
             info = room_map.get(number)
             label = (getattr(info, "name", None) or f"Room {number}").strip()

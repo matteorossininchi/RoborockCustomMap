@@ -30,7 +30,8 @@
         "data": {
           "path": "Pfad des Saugroboters",
           "reset_colors": "Alle Standardfarben und -einstellungen wiederherstellen",
-          "carpets": "Teppiche"
+          "carpets": "Teppiche",
+          "cleaned_area": "Zuletzt gereinigte Fläche heller (wie in der App)"
         }
       },
       "map_menu": {

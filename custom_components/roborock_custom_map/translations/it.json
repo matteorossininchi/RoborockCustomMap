@@ -30,7 +30,8 @@
         "data": {
           "path": "Percorso del robot",
           "reset_colors": "Ripristina tutti i colori e le impostazioni predefinite",
-          "carpets": "Tappeti"
+          "carpets": "Tappeti",
+          "cleaned_area": "Area lavata più chiara (come nell'app)"
         }
       },
       "map_menu": {

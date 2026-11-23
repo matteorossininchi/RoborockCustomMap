@@ -27,6 +27,7 @@ from homeassistant.helpers.storage import STORAGE_DIR
 from .const import (
     CARPETS_APP,
     CONF_CARPETS,
+    CONF_CLEANED_AREA,
     CONF_PATH_COLOR,
     CONF_ROOM_COLORS,
     DOMAIN,
@@ -160,9 +161,11 @@ def colors_palette(
 
 
 # Submap bits (one byte per map pixel). 0x01 is carpet; 0x04 (unknown to the
-# parser) marks the area covered by the last clean on Saros models and is not
-# drawn, like in the Roborock app.
+# parser) marks the area covered by the last clean on Saros models, which the
+# Roborock app shows as a lighter band around the path.
 _SUBMAP_CARPET_BITS = 0x01
+_SUBMAP_CLEANED_BITS = 0x04
+_CLEANED_LIGHTEN = 0.35
 _SUBMAP_REMOVED_BITS = 0x08 | 0x10
 _BLOCK_IMAGE = 2
 _BLOCK_SUBMAP = 17
@@ -177,8 +180,10 @@ def _int32(data: bytes, pos: int) -> int:
     return int.from_bytes(data[pos : pos + 4], "little", signed=True)
 
 
-def carpet_cells(raw: bytes) -> tuple[int, int, set[tuple[int, int]]] | None:
-    """(width, height, carpet cells) in image coordinates, or None when absent.
+def carpet_cells(
+    raw: bytes, bits: int = _SUBMAP_CARPET_BITS
+) -> tuple[int, int, set[tuple[int, int]]] | None:
+    """(width, height, cells with any of bits) in image coordinates, or None.
 
     Cells use the parser's orientation: x = column, y = row counted from the top
     of the rendered image (the raw rows are stored bottom-up).
@@ -204,7 +209,7 @@ def carpet_cells(raw: bytes) -> tuple[int, int, set[tuple[int, int]]] | None:
         return None
     cells: set[tuple[int, int]] = set()
     for idx, value in enumerate(submap[: width * height]):
-        if value & _SUBMAP_CARPET_BITS and not value & _SUBMAP_REMOVED_BITS:
+        if value & bits and not value & _SUBMAP_REMOVED_BITS:
             cells.add((idx % width, height - 1 - idx // width))
     return width, height, cells
 
@@ -250,6 +255,37 @@ def paint_carpets(
         for dy in range(map_scale):
             for dx in range(map_scale):
                 px[x0 + dx, y0 + dy] = shaded
+    return image
+
+
+def paint_cleaned(
+    image: Image.Image, raw: bytes, map_scale: int, amount: float = _CLEANED_LIGHTEN
+) -> Image.Image:
+    """Lighten the area covered by the last clean, like the Roborock app."""
+    found = carpet_cells(raw, _SUBMAP_CLEANED_BITS)
+    if found is None:
+        return image
+    width, height, cells = found
+    if not cells or image.size != (width * map_scale, height * map_scale):
+        return image
+    image = image.convert("RGBA")
+    px = image.load()
+    half = map_scale // 2
+    walls = {_rgb(ColorsPalette.COLORS[c]) for c in _WALL_COLORS}
+    for x, y in cells:
+        base = px[x * map_scale + half, y * map_scale + half]
+        if base[3] == 0 or base[:3] in walls:
+            continue
+        light = (
+            int(base[0] + (255 - base[0]) * amount),
+            int(base[1] + (255 - base[1]) * amount),
+            int(base[2] + (255 - base[2]) * amount),
+            base[3],
+        )
+        x0, y0 = x * map_scale, y * map_scale
+        for dy in range(map_scale):
+            for dx in range(map_scale):
+                px[x0 + dx, y0 + dy] = light
     return image
 
 
@@ -335,6 +371,8 @@ def build_colored_map(
     if floor.image is None:
         raise ValueError("Raw map data could not be rendered")
     image = paint_unknown(floor.image.data, map_scale)
+    if record.get(CONF_CLEANED_AREA, True):
+        image = paint_cleaned(image, raw, map_scale)
     carpets_app = record.get(CONF_CARPETS, CARPETS_APP) == CARPETS_APP
     image = paint_carpets(image, raw, map_scale, _CARPET_SHADE if carpets_app else 1.0)
     overlay = build_overlay(raw, drawables, map_scale, record.get(CONF_PATH_COLOR))
