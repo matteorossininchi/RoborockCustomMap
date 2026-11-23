@@ -1,0 +1,103 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_service%]"
+    },
+    "step": {
+      "user": {
+        "description": "Vuoi configurare Roborock Custom Map?"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Seleziona la mappa",
+        "data": {
+          "map": "Mappa"
+        }
+      },
+      "map": {
+        "title": "Configura la mappa",
+        "menu_options": {
+          "colors": "Colori delle stanze e del percorso",
+          "floor_plan": "Planimetria personalizzata"
+        }
+      },
+      "colors": {
+        "title": "Colori delle stanze e del percorso",
+        "description": "Scegli un colore per ogni stanza e per il percorso del robot. I colori lasciati al valore predefinito non vengono salvati. Vale solo per la mappa senza planimetria personalizzata.",
+        "data": {
+          "path": "Percorso del robot",
+          "reset_colors": "Ripristina tutti i colori predefiniti"
+        }
+      },
+      "map_menu": {
+        "title": "Planimetria personalizzata",
+        "menu_options": {
+          "tune": "Regola la planimetria personalizzata",
+          "upload": "Sostituisci la planimetria personalizzata",
+          "remove_confirm": "Rimuovi la planimetria personalizzata"
+        }
+      },
+      "upload": {
+        "title": "Carica la planimetria personalizzata",
+        "data": {
+          "file": "Scegli il file"
+        }
+      },
+      "tune": {
+        "title": "Regola la planimetria personalizzata",
+        "description": "Allinea la planimetria personalizzata ai muri reali.",
+        "data": {
+          "offset_x": "Spostamento orizzontale",
+          "offset_y": "Spostamento verticale",
+          "scale_x": "Scala orizzontale",
+          "scale_y": "Scala verticale",
+          "map_rotation": "Rotazione"
+        },
+        "data_description": {
+          "offset_x": "spostamento < 0px ⇒ planimetria ◀; spostamento > 0px ⇒ planimetria ▶",
+          "offset_y": "spostamento < 0px ⇒ planimetria ▲; spostamento > 0px ⇒ planimetria ▼",
+          "scale_x": "Moltiplicatore orizzontale applicato alla planimetria",
+          "scale_y": "Moltiplicatore verticale applicato alla planimetria",
+          "map_rotation": "Rotazione applicata ai muri reali"
+        }
+      },
+      "remove_confirm": {
+        "title": "Rimuovi la planimetria personalizzata",
+        "data": {
+          "confirm": "Ripristina la planimetria di base"
+        }
+      }
+    },
+    "error": {
+      "invalid_image": "Il file non è un'immagine supportata (PNG, JPEG o WebP).",
+      "file_too_large": "Il file è troppo grande (massimo 20 MB).",
+      "image_too_large": "L'immagine è troppo grande (massimo 8192 px).",
+      "upload_failed": "Non è stato possibile leggere il file caricato. Sceglilo di nuovo."
+    },
+    "abort": {
+      "not_loaded": "L'integrazione non è caricata. Assicurati che l'integrazione Roborock sia attiva e riprova.",
+      "no_maps": "Nessuna mappa trovata. Attendi che l'integrazione Roborock finisca di caricarsi e riprova.",
+      "unknown_map": "La mappa selezionata non esiste più.",
+      "no_raw_map": "I dati grezzi della mappa non sono ancora disponibili. Attendi il prossimo aggiornamento della mappa e riprova.",
+      "no_entity": "Entità immagine della mappa non trovata. Ricarica l'integrazione e riprova.",
+      "missing_override_file": "Impossibile leggere la planimetria salvata. Caricala di nuovo.",
+      "write_failed": "Impossibile salvare la planimetria. Controlla i log di Home Assistant."
+    }
+  },
+  "entity": {
+    "select": {
+      "rotation": {
+        "name": "Rotazione mappa",
+        "state": {
+          "0": "0°",
+          "90": "90°",
+          "180": "180°",
+          "270": "270°"
+        }
+      }
+    }
+  }
+}

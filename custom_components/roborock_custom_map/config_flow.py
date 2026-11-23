@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.selector import (
+    ColorRGBSelector,
     FileSelector,
     FileSelectorConfig,
     NumberSelector,
@@ -35,9 +36,13 @@ from .const import (
     CONF_CONFIRM,
     CONF_FILE,
     CONF_FILE_HASH,
+    CONF_MAP_COLORS,
     CONF_MAP_ROTATION,
     CONF_OFFSET_X,
     CONF_OFFSET_Y,
+    CONF_PATH_COLOR,
+    CONF_RESET_COLORS,
+    CONF_ROOM_COLORS,
     CONF_SCALE_X,
     CONF_SCALE_Y,
     DOMAIN,
@@ -229,10 +234,96 @@ class OptionsFlowHandler(OptionsFlow):
     async def async_step_map(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Choose what to configure for the selected map."""
+        return self.async_show_menu(
+            step_id="map",
+            menu_options=["colors", "floor_plan"],
+        )
+
+    async def async_step_floor_plan(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         """Route to upload or the manage menu depending on stored state."""
         if self._current_override() is not None:
             return await self.async_step_map_menu()
         return await self.async_step_upload()
+
+    async def async_step_colors(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Pick custom colors for each room and for the vacuum path."""
+        rooms = self._room_fields()
+        record = self._current_colors() or {}
+        stored_rooms = record.get(CONF_ROOM_COLORS, {})
+
+        if user_input is not None:
+            new_record: dict[str, Any] | None = None
+            if not user_input.get(CONF_RESET_COLORS):
+                new_rooms: dict[str, list[int]] = {}
+                for number, field in rooms:
+                    if (value := user_input.get(field)) is None:
+                        continue
+                    rgb = [int(c) for c in value[:3]]
+                    if tuple(rgb) != map_render.default_room_color(number):
+                        new_rooms[str(number)] = rgb
+                new_record = {}
+                if new_rooms:
+                    new_record[CONF_ROOM_COLORS] = new_rooms
+                if (path := user_input.get(CONF_PATH_COLOR)) is not None:
+                    rgb = [int(c) for c in path[:3]]
+                    if tuple(rgb) != map_render.default_path_color():
+                        new_record[CONF_PATH_COLOR] = rgb
+            options = dict(self.config_entry.options)
+            colors = dict(options.get(CONF_MAP_COLORS, {}))
+            if new_record:
+                colors[self._choice.rotation_key] = new_record
+            else:
+                colors.pop(self._choice.rotation_key, None)
+            options[CONF_MAP_COLORS] = colors
+            return self.async_create_entry(data=options)
+
+        schema: dict[Any, Any] = {}
+        for number, field in rooms:
+            current = stored_rooms.get(str(number)) or map_render.default_room_color(
+                number
+            )
+            schema[vol.Optional(field, default=list(current))] = ColorRGBSelector()
+        path = record.get(CONF_PATH_COLOR) or map_render.default_path_color()
+        schema[vol.Optional(CONF_PATH_COLOR, default=list(path))] = ColorRGBSelector()
+        schema[vol.Optional(CONF_RESET_COLORS, default=False)] = bool
+
+        return self.async_show_form(
+            step_id="colors",
+            data_schema=vol.Schema(schema),
+        )
+
+    def _room_fields(self) -> list[tuple[int, str]]:
+        """(room number, form field label) for every room of the selected map."""
+        choice = self._choice
+        home = choice.coordinator.properties_api.home
+        if home is None or not home.home_map_content:
+            return []
+        map_content = home.home_map_content.get(choice.map_flag)
+        map_data = map_content.map_data if map_content else None
+        rooms = getattr(map_data, "rooms", None) or {}
+        room_map = getattr(getattr(home, "_rooms_trait", None), "room_map", {}) or {}
+
+        fields: list[tuple[int, str]] = []
+        used: set[str] = {CONF_PATH_COLOR, CONF_RESET_COLORS}
+        for number in sorted(rooms):
+            info = room_map.get(number)
+            label = (getattr(info, "name", None) or f"Room {number}").strip()
+            if label in used:
+                label = f"{label} ({number})"
+            used.add(label)
+            fields.append((int(number), label))
+        return fields
+
+    def _current_colors(self) -> dict[str, Any] | None:
+        """Return the stored color record for the selected map."""
+        return self.config_entry.options.get(CONF_MAP_COLORS, {}).get(
+            self._choice.rotation_key
+        )
 
     async def async_step_map_menu(
         self, user_input: dict[str, Any] | None = None

@@ -17,6 +17,21 @@
           "map": "Map"
         }
       },
+      "map": {
+        "title": "Configure map",
+        "menu_options": {
+          "colors": "Room and path colors",
+          "floor_plan": "Custom Floor Plan"
+        }
+      },
+      "colors": {
+        "title": "Room and path colors",
+        "description": "Pick a color for each room and for the vacuum path. Colors left at their default are not stored. Only applies to the map without a Custom Floor Plan.",
+        "data": {
+          "path": "Vacuum path",
+          "reset_colors": "Restore all default colors"
+        }
+      },
       "map_menu": {
         "title": "Custom Floor Plan",
         "menu_options": {

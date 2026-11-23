@@ -27,8 +27,14 @@ CONF_CONFIRM = "confirm"
 CONF_ANCHOR_VX = "anchor_vx"
 CONF_ANCHOR_VY = "anchor_vy"
 
+CONF_MAP_COLORS = "map_colors"
+CONF_ROOM_COLORS = "rooms"
+CONF_PATH_COLOR = "path"
+CONF_RESET_COLORS = "reset_colors"
+
 DATA_PREVIEW_SESSIONS = "preview_sessions"
 DATA_LAST_BG_OVERRIDES = "last_bg_overrides"
+DATA_LAST_MAP_COLORS = "last_map_colors"
 
 PREVIEW_WS_TYPE = f"{DOMAIN}/start_preview"
 

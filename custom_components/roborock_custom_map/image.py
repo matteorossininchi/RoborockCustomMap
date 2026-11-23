@@ -34,6 +34,7 @@ from .const import (
     CONF_BG_OVERRIDES,
     CONF_FILE,
     CONF_FILE_HASH,
+    CONF_MAP_COLORS,
     DEFAULT_MAP_ROTATION,
     MAP_ROTATION_OPTIONS,
     get_map_rotation,
@@ -148,6 +149,7 @@ class RoborockMap(RoborockCoordinatedEntityV1, ImageEntity):
         self._bg_cache: tuple[tuple[str, str], bytes] | None = None
         self._composite_cache: tuple[tuple, bytes] | None = None
         self._override_render_ok: bool | None = None
+        self._colored_cache: tuple[tuple, bytes] | None = None
 
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -389,6 +391,49 @@ class RoborockMap(RoborockCoordinatedEntityV1, ImageEntity):
             self._set_override_render_ok(False)
             return None
 
+    async def _async_render_colored(self, map_content: MapContent) -> bytes | None:
+        """Render the map with the user's room/path colors, or None for stock."""
+        record = self.config_entry.options.get(CONF_MAP_COLORS, {}).get(
+            self.rotation_key
+        )
+        if not record:
+            return None
+        if (raw := map_content.raw_api_response) is None:
+            _LOGGER.debug(
+                "Raw map data unavailable for %s; serving stock colors",
+                self.rotation_key,
+            )
+            return None
+
+        drawables = self._core_drawables()
+        core_options = self.coordinator.config_entry.options
+        core_flags = {
+            "show_background": core_options.get("show_background", False),
+            "show_walls": core_options.get("show_walls", True),
+            "show_rooms": core_options.get("show_rooms", True),
+        }
+        record_key = repr(sorted((k, repr(v)) for k, v in record.items()))
+        cache_key = (raw, record_key, tuple(drawables), tuple(core_flags.values()))
+        if self._colored_cache is not None and self._colored_cache[0] == cache_key:
+            return self._colored_cache[1]
+
+        try:
+            image = await self.hass.async_add_executor_job(
+                map_render.build_colored_map,
+                raw,
+                drawables,
+                MAP_SCALE,
+                record,
+                core_flags,
+            )
+        except Exception as err:  # noqa: BLE001 - never break the map over colors
+            _LOGGER.warning(
+                "Failed to render custom colors for %s: %s", self.rotation_key, err
+            )
+            return None
+        self._colored_cache = (cache_key, image)
+        return image
+
     async def async_image(self) -> bytes | None:
         """Get the image (with optional background override and rotation)."""
         if (map_content := self._map_content) is None:
@@ -403,7 +448,7 @@ class RoborockMap(RoborockCoordinatedEntityV1, ImageEntity):
         if composite is not None:
             return composite
 
-        base = map_content.image_content
+        base = await self._async_render_colored(map_content) or map_content.image_content
         if rotation == DEFAULT_MAP_ROTATION:
             return base
 

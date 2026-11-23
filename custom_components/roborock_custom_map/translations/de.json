@@ -17,6 +17,21 @@
           "map": "Karte"
         }
       },
+      "map": {
+        "title": "Karte konfigurieren",
+        "menu_options": {
+          "colors": "Farben für Räume und Pfad",
+          "floor_plan": "Eigener Grundriss"
+        }
+      },
+      "colors": {
+        "title": "Farben für Räume und Pfad",
+        "description": "Wähle eine Farbe für jeden Raum und für den Pfad des Saugroboters. Unveränderte Standardfarben werden nicht gespeichert. Gilt nur für die Karte ohne eigenen Grundriss.",
+        "data": {
+          "path": "Pfad des Saugroboters",
+          "reset_colors": "Alle Standardfarben wiederherstellen"
+        }
+      },
       "map_menu": {
         "title": "Eigener Grundriss",
         "menu_options": {

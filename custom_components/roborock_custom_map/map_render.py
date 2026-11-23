@@ -25,6 +25,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import STORAGE_DIR
 
 from .const import (
+    CONF_PATH_COLOR,
+    CONF_ROOM_COLORS,
     DOMAIN,
     MAX_BG_DIMENSION,
     MAX_COMPOSITE_DIMENSION,
@@ -105,6 +107,71 @@ def _create_parser(
         ImageConfig(scale=map_scale),
         [],
     )
+
+
+def _rgb(value: Color | list[int]) -> tuple[int, int, int]:
+    return (int(value[0]), int(value[1]), int(value[2]))
+
+
+def default_room_color(number: int | str) -> tuple[int, int, int]:
+    """Color the stock palette uses for a room (what the core map shows)."""
+    color = ColorsPalette.ROOM_COLORS.get(str(number))
+    return _rgb(color) if color is not None else (133, 193, 233)
+
+
+def default_path_color() -> tuple[int, int, int]:
+    """Color the stock palette uses for the vacuum path."""
+    return _rgb(ColorsPalette.COLORS[SupportedColor.PATH])
+
+
+def colors_palette(
+    record: dict,
+    *,
+    show_background: bool = False,
+    show_walls: bool = True,
+    show_rooms: bool = True,
+) -> ColorsPalette:
+    """Palette of the core integration with the user's room/path colors on top.
+
+    The show_* flags mirror the core Roborock options (same defaults), so a map
+    re-rendered here looks exactly like the core one apart from the custom colors.
+    """
+    colors: dict[SupportedColor, Color] = {}
+    rooms: dict[str, Color] = {}
+    if not show_background:
+        colors[SupportedColor.MAP_OUTSIDE] = _TRANSPARENT
+    if not show_walls:
+        for wall_color in _WALL_COLORS:
+            colors[wall_color] = _TRANSPARENT
+    if not show_rooms:
+        rooms = {str(room_id): _TRANSPARENT for room_id in range(1, 32)}
+
+    if (path := record.get(CONF_PATH_COLOR)) is not None:
+        colors[SupportedColor.PATH] = _rgb(path)
+    for number, color in record.get(CONF_ROOM_COLORS, {}).items():
+        rooms[str(number)] = _rgb(color)
+    return ColorsPalette(colors, rooms)
+
+
+def build_colored_map(
+    raw: bytes,
+    drawables: list[Drawable],
+    map_scale: int,
+    record: dict,
+    core_flags: dict[str, bool] | None = None,
+) -> bytes:
+    """Re-render the raw map like the core integration, but with custom colors.
+
+    Uses the same parser settings as the core Roborock integration, so the image
+    size (and therefore the calibration points) stays identical.
+    """
+    palette = colors_palette(record, **(core_flags or {}))
+    parsed = _create_parser(palette, drawables, map_scale).parse(raw)
+    if parsed.image is None:
+        raise ValueError("Raw map data could not be rendered")
+    out = io.BytesIO()
+    parsed.image.data.save(out, format="PNG")
+    return out.getvalue()
 
 
 def build_overlay(raw: bytes, drawables: list[Drawable], map_scale: int) -> Image.Image:

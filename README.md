@@ -49,6 +49,22 @@ You can now override a Stock Floor Plan with your own Custom Floor Plan
 
 Reopen `Configure` **at any time** to Adjust, Replace, or Remove the Custom Floor Plan.
 
+### Room and Path Colors
+
+The stock palette can make some rooms almost the same color as the vacuum path
+(for example room 2 is (133, 193, 233) and the path is (147, 194, 238)).
+You can pick your own colors per map:
+
+1. `Settings` → `Devices & Services` → `Roborock Custom Map` → press `Configure`.
+2. Pick a Floor (only if > 1 available), then choose `Room and path colors`.
+3. Pick a color for each room and for the vacuum path, then press `Submit`.
+   Colors left at their default are not stored; tick `Restore all default colors` to undo everything.
+
+The map is re-rendered from the raw map data with the same settings as the core
+integration (including its *Show background / walls / rooms* options), so its size
+and calibration points do not change. Colors apply to the normal map, not to a
+Custom Floor Plan.
+
 ### Installation
 
 ### Installing via HACS
