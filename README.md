@@ -8,8 +8,8 @@
 > (room 2 is `(133, 193, 233)`, the path is `(147, 194, 238)`), so you can't tell where the
 > vacuum has already been. This fork lets you pick a color for every room and for the path
 > from the integration's options — see [Room and Path Colors](#room-and-path-colors).
-> It also draws **carpets like the Roborock app** (a darker checkerboard of the room color),
-> including the carpet encoding used by Saros models that the map parser does not know yet.
+> It also draws **carpets like the Roborock app** (a darker checkerboard of the room color) and
+> shows obstacle cells the map parser can't classify as a **darker room color instead of black**.
 >
 > - Based on the upstream `main` branch (the unreleased 0.2.0 code, newer than the 0.1.6 release).
 > - Everything else works exactly like upstream; the map is re-rendered with the same settings

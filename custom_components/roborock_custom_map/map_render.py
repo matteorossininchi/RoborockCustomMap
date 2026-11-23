@@ -133,6 +133,7 @@ def colors_palette(
     show_background: bool = False,
     show_walls: bool = True,
     show_rooms: bool = True,
+    extra: dict[SupportedColor, Color] | None = None,
 ) -> ColorsPalette:
     """Palette of the core integration with the user's room/path colors on top.
 
@@ -153,12 +154,15 @@ def colors_palette(
         colors[SupportedColor.PATH] = _rgb(path)
     for number, color in record.get(CONF_ROOM_COLORS, {}).items():
         rooms[str(number)] = _rgb(color)
+    if extra:
+        colors.update(extra)
     return ColorsPalette(colors, rooms)
 
 
-# Submap bits (one byte per map pixel). The parser only knows CARPET=1; Saros
-# models mark carpets with bit 4 instead, so both are treated as carpet here.
-_SUBMAP_CARPET_BITS = 0x01 | 0x04
+# Submap bits (one byte per map pixel). 0x01 is carpet; 0x04 (unknown to the
+# parser) marks the area covered by the last clean on Saros models and is not
+# drawn, like in the Roborock app.
+_SUBMAP_CARPET_BITS = 0x01
 _SUBMAP_REMOVED_BITS = 0x08 | 0x10
 _BLOCK_IMAGE = 2
 _BLOCK_SUBMAP = 17
@@ -205,12 +209,15 @@ def carpet_cells(raw: bytes) -> tuple[int, int, set[tuple[int, int]]] | None:
     return width, height, cells
 
 
-def paint_carpets(image: Image.Image, raw: bytes, map_scale: int) -> Image.Image:
+def paint_carpets(
+    image: Image.Image, raw: bytes, map_scale: int, shade: float = _CARPET_SHADE
+) -> Image.Image:
     """Draw carpets like the Roborock app: a checkerboard of the room color, darker.
 
     Only cells on the "odd" squares are darkened (same pattern the parser uses);
     their color is taken from the neighbouring square, so it follows the room
-    color and also replaces the parser's own green carpet squares.
+    color and also replaces the parser's own green carpet squares. shade=1.0
+    hides carpets entirely.
     """
     found = carpet_cells(raw)
     if found is None:
@@ -225,24 +232,84 @@ def paint_carpets(image: Image.Image, raw: bytes, map_scale: int) -> Image.Image
         if not (x + y) % 2:
             continue
         base = None
-        for nx in (x + 1, x - 1):
-            if 0 <= nx < width:
-                color = px[nx * map_scale + half, y * map_scale + half]
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if 0 <= nx < width and 0 <= ny < height:
+                color = px[nx * map_scale + half, ny * map_scale + half]
                 if color[3] > 0:
                     base = color
                     break
         if base is None:
             continue
         shaded = (
-            int(base[0] * _CARPET_SHADE),
-            int(base[1] * _CARPET_SHADE),
-            int(base[2] * _CARPET_SHADE),
+            int(base[0] * shade),
+            int(base[1] * shade),
+            int(base[2] * shade),
             base[3],
         )
         x0, y0 = x * map_scale, y * map_scale
         for dy in range(map_scale):
             for dx in range(map_scale):
                 px[x0 + dx, y0 + dy] = shaded
+    return image
+
+
+# Map pixels the parser can't classify (obstacle codes 2-6) are drawn in the
+# UNKNOWN color, black by default. The app shows them as a darker room color.
+_UNKNOWN_SENTINEL: Color = (1, 2, 3, 255)
+_UNKNOWN_SHADE = 0.72
+_UNKNOWN_SEARCH = 4
+
+
+def paint_unknown(image: Image.Image, map_scale: int) -> Image.Image:
+    """Replace sentinel (unknown) cells with a darker shade of the nearest room color."""
+    image = image.convert("RGBA")
+    px = image.load()
+    width, height = image.width // map_scale, image.height // map_scale
+    half = map_scale // 2
+    sentinel = _UNKNOWN_SENTINEL[:3]
+    walls = {
+        _rgb(ColorsPalette.COLORS[c])
+        for c in (*_WALL_COLORS, SupportedColor.MAP_INSIDE, SupportedColor.SCAN)
+    }
+
+    def cell(x: int, y: int) -> tuple[int, int, int, int]:
+        return px[x * map_scale + half, y * map_scale + half]
+
+    targets = [
+        (x, y)
+        for y in range(height)
+        for x in range(width)
+        if cell(x, y)[:3] == sentinel
+    ]
+    fallback = _rgb(ColorsPalette.COLORS[SupportedColor.GREY_WALL]) + (255,)
+    for x, y in targets:
+        found = None
+        for radius in range(1, _UNKNOWN_SEARCH + 1):
+            for dx, dy in (
+                (radius, 0), (-radius, 0), (0, radius), (0, -radius),
+                (radius, radius), (-radius, -radius), (radius, -radius), (-radius, radius),
+            ):
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < width and 0 <= ny < height:
+                    color = cell(nx, ny)
+                    if color[3] > 0 and color[:3] != sentinel and color[:3] not in walls:
+                        found = color
+                        break
+            if found is not None:
+                break
+        if found is None:
+            shaded = fallback
+        else:
+            shaded = (
+                int(found[0] * _UNKNOWN_SHADE),
+                int(found[1] * _UNKNOWN_SHADE),
+                int(found[2] * _UNKNOWN_SHADE),
+                found[3],
+            )
+        x0, y0 = x * map_scale, y * map_scale
+        for oy in range(map_scale):
+            for ox in range(map_scale):
+                px[x0 + ox, y0 + oy] = shaded
     return image
 
 
@@ -256,29 +323,24 @@ def build_colored_map(
     """Re-render the raw map like the core integration, but with custom colors.
 
     Uses the same parser settings as the core Roborock integration, so the image
-    size (and therefore the calibration points) stays identical. With carpets in
-    "app" style the floor is rendered first, carpets are painted on it and the
-    drawables (path, vacuum, charger...) are composited on top.
+    size (and therefore the calibration points) stays identical. The floor is
+    rendered first (unknown cells shaded like the app, carpets as a darker
+    checkerboard when enabled), then the drawables (path, vacuum, charger...)
+    are composited on top.
     """
-    palette = colors_palette(record, **(core_flags or {}))
-    carpets = record.get(CONF_CARPETS, CARPETS_APP) == CARPETS_APP
-    if carpets and carpet_cells(raw) is not None:
-        floor = _create_parser(palette, [], map_scale).parse(raw)
-        if floor.image is None:
-            raise ValueError("Raw map data could not be rendered")
-        image = paint_carpets(floor.image.data.convert("RGBA"), raw, map_scale)
-        overlay = build_overlay(raw, drawables, map_scale, record.get(CONF_PATH_COLOR))
-        if overlay.size == image.size:
-            image.alpha_composite(overlay)
-        else:
-            image = None
-    else:
-        image = None
-    if image is None:
-        parsed = _create_parser(palette, drawables, map_scale).parse(raw)
-        if parsed.image is None:
-            raise ValueError("Raw map data could not be rendered")
-        image = parsed.image.data
+    palette = colors_palette(
+        record, **(core_flags or {}), extra={SupportedColor.UNKNOWN: _UNKNOWN_SENTINEL}
+    )
+    floor = _create_parser(palette, [], map_scale).parse(raw)
+    if floor.image is None:
+        raise ValueError("Raw map data could not be rendered")
+    image = paint_unknown(floor.image.data, map_scale)
+    carpets_app = record.get(CONF_CARPETS, CARPETS_APP) == CARPETS_APP
+    image = paint_carpets(image, raw, map_scale, _CARPET_SHADE if carpets_app else 1.0)
+    overlay = build_overlay(raw, drawables, map_scale, record.get(CONF_PATH_COLOR))
+    if overlay.size != image.size:
+        raise ValueError("Overlay and floor sizes differ")
+    image.alpha_composite(overlay)
     out = io.BytesIO()
     image.save(out, format="PNG")
     return out.getvalue()
