@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 import io
 import logging
+import time
 
 from PIL import Image, UnidentifiedImageError
 from roborock.devices.traits.v1.home import HomeTrait
@@ -427,6 +428,7 @@ class RoborockMap(RoborockCoordinatedEntityV1, ImageEntity):
         if self._colored_cache is not None and self._colored_cache[0] == cache_key:
             return self._colored_cache[1]
 
+        started = time.monotonic()
         try:
             image = await self.hass.async_add_executor_job(
                 map_render.build_colored_map,
@@ -441,6 +443,10 @@ class RoborockMap(RoborockCoordinatedEntityV1, ImageEntity):
                 "Failed to render custom colors for %s: %s", self.rotation_key, err
             )
             return None
+        _LOGGER.debug(
+            "Rendered custom colors for %s in %.2f s",
+            self.rotation_key, time.monotonic() - started,
+        )
         self._colored_cache = (cache_key, image)
         return image
 
