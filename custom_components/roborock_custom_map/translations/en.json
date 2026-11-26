@@ -31,7 +31,7 @@
           "path": "Vacuum path",
           "reset_colors": "Restore all default colors and settings",
           "carpets": "Carpets",
-          "cleaned_area": "Lighter area covered by the last clean (like the app)"
+          "cleaned_area": "Lighter band where the mop was down (like the app)"
         }
       },
       "map_menu": {

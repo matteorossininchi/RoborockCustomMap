@@ -10,7 +10,8 @@
 > from the integration's options — see [Room and Path Colors](#room-and-path-colors).
 > It also draws **carpets like the Roborock app** (a darker checkerboard of the room color) and
 > shows obstacle cells the map parser can't classify as a **darker room color instead of black**.
-> The **area covered by the last clean** is shown lighter, like the band around the path in the app.
+> Where the **mop was down**, a lighter band follows the path, like in the app (none on carpets,
+> where the mop is lifted).
 >
 > - Based on the upstream `main` branch (the unreleased 0.2.0 code, newer than the 0.1.6 release).
 > - Everything else works exactly like upstream; the map is re-rendered with the same settings
@@ -83,8 +84,8 @@ You can pick your own colors per map:
 1. `Settings` → `Devices & Services` → `Roborock Custom Map` → press `Configure`.
 2. Pick a Floor (only if > 1 available), then choose `Room and path colors`.
 3. Pick a color for each room and for the vacuum path, choose how carpets are drawn
-   (*Like the Roborock app* or *Hidden*), choose whether to show the area covered by the last
-   clean in a lighter shade, then press `Submit`.
+   (*Like the Roborock app* or *Hidden*), choose whether to show the lighter band where the mop
+   was down, then press `Submit`.
    Colors left at their default are not stored; tick `Restore all default colors` to undo everything.
 
 The map is re-rendered from the raw map data with the same settings as the core

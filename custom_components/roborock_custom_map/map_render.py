@@ -96,17 +96,19 @@ def _mask_palette() -> ColorsPalette:
 
 
 def _create_parser(
-    palette: ColorsPalette, drawables: list[Drawable], map_scale: int
+    palette: ColorsPalette,
+    drawables: list[Drawable],
+    map_scale: int,
+    mop_width: float | None = None,
 ) -> RoborockMapDataParser:
+    sizes = {
+        k: v * map_scale for k, v in Sizes.SIZES.items() if k != Size.MOP_PATH_WIDTH
+    }
+    if mop_width is not None:
+        sizes[Size.MOP_PATH_WIDTH] = mop_width
     return RoborockMapDataParser(
         palette,
-        Sizes(
-            {
-                k: v * map_scale
-                for k, v in Sizes.SIZES.items()
-                if k != Size.MOP_PATH_WIDTH
-            }
-        ),
+        Sizes(sizes),
         drawables,
         ImageConfig(scale=map_scale),
         [],
@@ -165,7 +167,9 @@ def colors_palette(
 # Roborock app shows as a lighter band around the path.
 _SUBMAP_CARPET_BITS = 0x01
 _SUBMAP_CLEANED_BITS = 0x04
-_CLEANED_LIGHTEN = 0.35
+_CLEANED_LIGHTEN = 0.28
+# Width of the mopped band drawn along the mop path, in map pixels (5 cm each).
+_MOP_BAND_CELLS = 6
 _SUBMAP_REMOVED_BITS = 0x08 | 0x10
 _BLOCK_IMAGE = 2
 _BLOCK_SUBMAP = 17
@@ -261,11 +265,15 @@ def paint_carpets(
 def paint_cleaned(
     image: Image.Image, raw: bytes, map_scale: int, amount: float = _CLEANED_LIGHTEN
 ) -> Image.Image:
-    """Lighten the area covered by the last clean, like the Roborock app."""
+    """Fallback when the map has no mop path: lighten the cells covered by the
+    last clean, except carpets (the mop is lifted there)."""
     found = carpet_cells(raw, _SUBMAP_CLEANED_BITS)
     if found is None:
         return image
     width, height, cells = found
+    carpets = carpet_cells(raw)
+    if carpets is not None:
+        cells -= carpets[2]  # the mop is lifted on carpets
     if not cells or image.size != (width * map_scale, height * map_scale):
         return image
     image = image.convert("RGBA")
@@ -371,10 +379,22 @@ def build_colored_map(
     if floor.image is None:
         raise ValueError("Raw map data could not be rendered")
     image = paint_unknown(floor.image.data, map_scale)
-    if record.get(CONF_CLEANED_AREA, True):
+    show_mopped = record.get(CONF_CLEANED_AREA, True)
+    has_mop_path = bool(floor.mop_path and floor.mop_path.path)
+    if show_mopped and not has_mop_path:
         image = paint_cleaned(image, raw, map_scale)
     carpets_app = record.get(CONF_CARPETS, CARPETS_APP) == CARPETS_APP
     image = paint_carpets(image, raw, map_scale, _CARPET_SHADE if carpets_app else 1.0)
+    if show_mopped and has_mop_path:
+        # Like the app: a translucent band along the path where the mop was down,
+        # drawn below the path itself.
+        mopped = _create_parser(
+            _overlay_palette(), [Drawable.MOP_PATH], map_scale,
+            mop_width=_MOP_BAND_CELLS * map_scale,
+        ).parse(raw)
+        if mopped.image is not None and mopped.image.data.size == image.size:
+            image.alpha_composite(mopped.image.data.convert("RGBA"))
+    drawables = [d for d in drawables if d != Drawable.MOP_PATH]
     overlay = build_overlay(raw, drawables, map_scale, record.get(CONF_PATH_COLOR))
     if overlay.size != image.size:
         raise ValueError("Overlay and floor sizes differ")
