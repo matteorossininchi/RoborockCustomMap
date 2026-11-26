@@ -95,6 +95,9 @@ def _mask_palette() -> ColorsPalette:
     return ColorsPalette(colors, _transparent_room_colors())
 
 
+_PATH_WIDTH_CELLS = 0.5
+
+
 def _create_parser(
     palette: ColorsPalette,
     drawables: list[Drawable],
@@ -104,6 +107,8 @@ def _create_parser(
     sizes = {
         k: v * map_scale for k, v in Sizes.SIZES.items() if k != Size.MOP_PATH_WIDTH
     }
+    # Thinner path than the core's (1 map pixel), closer to the Roborock app.
+    sizes[Size.PATH_WIDTH] = max(1, round(map_scale * _PATH_WIDTH_CELLS))
     if mop_width is not None:
         sizes[Size.MOP_PATH_WIDTH] = mop_width
     return RoborockMapDataParser(
