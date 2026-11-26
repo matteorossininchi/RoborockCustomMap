@@ -225,6 +225,10 @@ def carpet_cells(
 
 _BLOCK_MOP_PATH = 18
 _TRANSIT_DOT_SPACING = 4.0  # dot spacing, in path widths
+_FLAG_MOP = 0x01
+_FLAG_VACUUM = 0x08
+_FLAG_CLEANING = _FLAG_MOP | _FLAG_VACUUM
+_MOP_BAND_ALPHA = 0x48
 
 
 def _block(raw: bytes, wanted: int) -> bytes | None:
@@ -242,23 +246,19 @@ def _block(raw: bytes, wanted: int) -> bytes | None:
     return None
 
 
-def draw_app_path(
-    image: Image.Image,
-    map_data,
-    raw: bytes,
-    map_scale: int,
-    color: Color,
-) -> bool:
-    """Draw the vacuum path like the app: solid where it cleaned, dotted where
-    it only moved (no mop and not on a carpet). Returns False when the map has
-    no mop mask to tell them apart (the caller draws the stock path then)."""
+def _path_flags(map_data, raw: bytes):
+    """(image points, per-point flags) from the path and its mask block, or None.
+
+    The mask (block 18) has one byte per path point. On a Saros 10R it is a
+    bitfield: 0x01 mop down, 0x08 vacuuming; 0 means the robot only moved.
+    """
     mask = _block(raw, _BLOCK_MOP_PATH)
     path = getattr(map_data, "path", None)
     if not mask or path is None or not path.path or map_data.image is None:
-        return False
+        return None
     points = [pt for part in path.path for pt in part]
-    if len(points) < 2 or not any(mask[: len(points)]):
-        return False
+    if len(points) < 2 or len(mask) < len(points):
+        return None
     if _LOGGER.isEnabledFor(logging.DEBUG):
         values: dict[int, int] = {}
         for value in mask[: len(points)]:
@@ -267,10 +267,40 @@ def draw_app_path(
             "Mop mask: %d path points, %d mask bytes, values %s",
             len(points), len(mask), dict(sorted(values.items())),
         )
-    found = carpet_cells(raw)
-    carpets = found[2] if found else set()
     dims = map_data.image.dimensions
-    img_pts = [pt.to_img(dims) for pt in points]
+    return [pt.to_img(dims) for pt in points], mask[: len(points)]
+
+
+def draw_mop_band(
+    image: Image.Image, pts, flags: bytes, map_scale: int
+) -> bool:
+    """Translucent band along the segments where the mop was down, like the app."""
+    band = Image.new("L", image.size, 0)
+    draw = ImageDraw.Draw(band)
+    width = _MOP_BAND_CELLS * map_scale
+    r = width / 2
+    drawn = False
+    for i in range(len(pts) - 1):
+        if not (flags[i] & _FLAG_MOP and flags[i + 1] & _FLAG_MOP):
+            continue
+        s, e = pts[i], pts[i + 1]
+        draw.line([s.x, s.y, e.x, e.y], fill=255, width=width)
+        for q in (s, e):
+            draw.ellipse([q.x - r, q.y - r, q.x + r, q.y + r], fill=255)
+        drawn = True
+    if not drawn:
+        return False
+    alpha = band.point(lambda v: _MOP_BAND_ALPHA if v else 0)
+    layer = Image.new("RGBA", image.size, (255, 255, 255, 0))
+    layer.putalpha(alpha)
+    image.alpha_composite(layer)
+    return True
+
+
+def draw_app_path(
+    image: Image.Image, pts, flags: bytes, map_scale: int, color: Color
+) -> None:
+    """Vacuum path like the app: solid while cleaning, dotted while only moving."""
     width = max(1, round(map_scale * _PATH_WIDTH_CELLS))
     rgba = tuple(color) if len(color) == 4 else (*color, 255)
     layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
@@ -278,11 +308,15 @@ def draw_app_path(
     spacing = width * _TRANSIT_DOT_SPACING
     carry = 0.0
     r = width / 2 + 0.3
-    for i in range(len(img_pts) - 1):
-        s, e = img_pts[i], img_pts[i + 1]
-        mopped = i + 1 < len(mask) and mask[i] and mask[i + 1]
-        mid = (int((s.x + e.x) / 2 / map_scale), int((s.y + e.y) / 2 / map_scale))
-        if mopped or mid in carpets:
+    # Masks without the vacuuming flag can't tell moves apart: all solid then.
+    knows_moves = any(f & _FLAG_VACUUM for f in flags)
+    for i in range(len(pts) - 1):
+        s, e = pts[i], pts[i + 1]
+        if (
+            not knows_moves
+            or flags[i] & _FLAG_CLEANING
+            or flags[i + 1] & _FLAG_CLEANING
+        ):
             draw.line([s.x, s.y, e.x, e.y], fill=rgba, width=width)
             if width > 2:
                 j = width / 2
@@ -298,8 +332,6 @@ def draw_app_path(
             t += spacing
         carry = t - length
     image.alpha_composite(layer)
-    return True
-
 
 def paint_carpets(
     image: Image.Image, raw: bytes, map_scale: int, shade: float = _CARPET_SHADE
@@ -463,24 +495,19 @@ def build_colored_map(
         raise ValueError("Raw map data could not be rendered")
     image = paint_unknown(floor.image.data, map_scale)
     show_mopped = record.get(CONF_CLEANED_AREA, True)
-    has_mop_path = bool(floor.mop_path and floor.mop_path.path)
-    if show_mopped and not has_mop_path:
+    path_info = _path_flags(floor, raw)
+    has_mop = bool(path_info and any(f & _FLAG_MOP for f in path_info[1]))
+    if show_mopped and not has_mop:
         image = paint_cleaned(image, raw, map_scale)
     carpets_app = record.get(CONF_CARPETS, CARPETS_APP) == CARPETS_APP
     image = paint_carpets(image, raw, map_scale, _CARPET_SHADE if carpets_app else 1.0)
-    if show_mopped and has_mop_path:
-        # Like the app: a translucent band along the path where the mop was down,
-        # drawn below the path itself.
-        mopped = _create_parser(
-            _overlay_palette(), [Drawable.MOP_PATH], map_scale,
-            mop_width=_MOP_BAND_CELLS * map_scale,
-        ).parse(raw)
-        if mopped.image is not None and mopped.image.data.size == image.size:
-            image.alpha_composite(mopped.image.data.convert("RGBA"))
+    if show_mopped and has_mop:
+        draw_mop_band(image, *path_info, map_scale)
     drawables = [d for d in drawables if d != Drawable.MOP_PATH]
-    if Drawable.PATH in drawables and draw_app_path(
-        image, floor, raw, map_scale, palette.get_color(SupportedColor.PATH)
-    ):
+    if Drawable.PATH in drawables and path_info is not None:
+        draw_app_path(
+            image, *path_info, map_scale, palette.get_color(SupportedColor.PATH)
+        )
         drawables = [d for d in drawables if d != Drawable.PATH]
     overlay = build_overlay(raw, drawables, map_scale, record.get(CONF_PATH_COLOR))
     if overlay.size != image.size:
