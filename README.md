@@ -11,7 +11,7 @@
 > It also draws **carpets like the Roborock app** (a darker checkerboard of the room color) and
 > shows obstacle cells the map parser can't classify as a **darker room color instead of black**.
 > Where the **mop was down**, a lighter band follows the path, like in the app (none on carpets,
-> where the mop is lifted).
+> where the mop is lifted). Moves without cleaning are drawn **dotted**, like in the app.
 >
 > - Based on the upstream `main` branch (the unreleased 0.2.0 code, newer than the 0.1.6 release).
 > - Everything else works exactly like upstream; the map is re-rendered with the same settings

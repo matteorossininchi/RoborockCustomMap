@@ -13,7 +13,7 @@ import logging
 import math
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageOps
 from vacuum_map_parser_base.config.color import Color, ColorsPalette, SupportedColor
 from vacuum_map_parser_base.config.drawable import Drawable
 from vacuum_map_parser_base.config.image_config import ImageConfig
@@ -223,6 +223,84 @@ def carpet_cells(
     return width, height, cells
 
 
+_BLOCK_MOP_PATH = 18
+_TRANSIT_DOT_SPACING = 4.0  # dot spacing, in path widths
+
+
+def _block(raw: bytes, wanted: int) -> bytes | None:
+    """Data of the first block of the given type, or None."""
+    pos = _int16(raw, 0x02)
+    while pos + 8 <= len(raw):
+        block_type = _int16(raw, pos)
+        header_length = _int16(raw, pos + 0x02)
+        data_length = _int32(raw, pos + 0x04)
+        if header_length <= 0 or data_length < 0:
+            return None
+        if block_type == wanted:
+            return raw[pos + header_length : pos + header_length + data_length]
+        pos += header_length + data_length
+    return None
+
+
+def draw_app_path(
+    image: Image.Image,
+    map_data,
+    raw: bytes,
+    map_scale: int,
+    color: Color,
+) -> bool:
+    """Draw the vacuum path like the app: solid where it cleaned, dotted where
+    it only moved (no mop and not on a carpet). Returns False when the map has
+    no mop mask to tell them apart (the caller draws the stock path then)."""
+    mask = _block(raw, _BLOCK_MOP_PATH)
+    path = getattr(map_data, "path", None)
+    if not mask or path is None or not path.path or map_data.image is None:
+        return False
+    points = [pt for part in path.path for pt in part]
+    if len(points) < 2 or not any(mask[: len(points)]):
+        return False
+    if _LOGGER.isEnabledFor(logging.DEBUG):
+        values: dict[int, int] = {}
+        for value in mask[: len(points)]:
+            values[value] = values.get(value, 0) + 1
+        _LOGGER.debug(
+            "Mop mask: %d path points, %d mask bytes, values %s",
+            len(points), len(mask), dict(sorted(values.items())),
+        )
+    found = carpet_cells(raw)
+    carpets = found[2] if found else set()
+    dims = map_data.image.dimensions
+    img_pts = [pt.to_img(dims) for pt in points]
+    width = max(1, round(map_scale * _PATH_WIDTH_CELLS))
+    rgba = tuple(color) if len(color) == 4 else (*color, 255)
+    layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    spacing = width * _TRANSIT_DOT_SPACING
+    carry = 0.0
+    r = width / 2 + 0.3
+    for i in range(len(img_pts) - 1):
+        s, e = img_pts[i], img_pts[i + 1]
+        mopped = i + 1 < len(mask) and mask[i] and mask[i + 1]
+        mid = (int((s.x + e.x) / 2 / map_scale), int((s.y + e.y) / 2 / map_scale))
+        if mopped or mid in carpets:
+            draw.line([s.x, s.y, e.x, e.y], fill=rgba, width=width)
+            if width > 2:
+                j = width / 2
+                draw.ellipse([e.x - j, e.y - j, e.x + j, e.y + j], fill=rgba)
+            carry = 0.0
+            continue
+        length = math.hypot(e.x - s.x, e.y - s.y)
+        t = carry
+        while t <= length:
+            f = t / length if length else 0
+            x, y = s.x + (e.x - s.x) * f, s.y + (e.y - s.y) * f
+            draw.ellipse([x - r, y - r, x + r, y + r], fill=rgba)
+            t += spacing
+        carry = t - length
+    image.alpha_composite(layer)
+    return True
+
+
 def paint_carpets(
     image: Image.Image, raw: bytes, map_scale: int, shade: float = _CARPET_SHADE
 ) -> Image.Image:
@@ -400,6 +478,10 @@ def build_colored_map(
         if mopped.image is not None and mopped.image.data.size == image.size:
             image.alpha_composite(mopped.image.data.convert("RGBA"))
     drawables = [d for d in drawables if d != Drawable.MOP_PATH]
+    if Drawable.PATH in drawables and draw_app_path(
+        image, floor, raw, map_scale, palette.get_color(SupportedColor.PATH)
+    ):
+        drawables = [d for d in drawables if d != Drawable.PATH]
     overlay = build_overlay(raw, drawables, map_scale, record.get(CONF_PATH_COLOR))
     if overlay.size != image.size:
         raise ValueError("Overlay and floor sizes differ")
