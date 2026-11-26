@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 import io
 import logging
@@ -152,6 +153,7 @@ class RoborockMap(RoborockCoordinatedEntityV1, ImageEntity):
         self._composite_cache: tuple[tuple, bytes] | None = None
         self._override_render_ok: bool | None = None
         self._colored_cache: tuple[tuple, bytes] | None = None
+        self._prerender_task: asyncio.Task | None = None
 
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -182,7 +184,33 @@ class RoborockMap(RoborockCoordinatedEntityV1, ImageEntity):
             )
         )
 
+        self.async_on_remove(self._cancel_prerender)
         self.async_write_ha_state()
+        self._schedule_prerender()
+
+    @callback
+    def _cancel_prerender(self) -> None:
+        if self._prerender_task is not None:
+            self._prerender_task.cancel()
+
+    @callback
+    def _schedule_prerender(self) -> None:
+        """Render the colored map in the background as soon as new map data
+        arrives, so the first time the map is opened it is already cached."""
+        if self._prerender_task is not None and not self._prerender_task.done():
+            return
+        self._prerender_task = self.hass.async_create_background_task(
+            self._async_prerender(), f"roborock_custom_map prerender {self.rotation_key}"
+        )
+
+    async def _async_prerender(self) -> None:
+        if (map_content := self._map_content) is None:
+            return
+        await self._async_render_colored(map_content)
+        # Data may have changed while rendering: catch up once more.
+        latest = self._map_content
+        if latest is not None and latest is not map_content:
+            await self._async_render_colored(latest)
 
     @callback
     def _async_handle_refresh(self) -> None:
@@ -199,6 +227,7 @@ class RoborockMap(RoborockCoordinatedEntityV1, ImageEntity):
             self.cached_map = map_content.image_content
             self._raw_image_size = _png_dimensions(self.cached_map)
             self._attr_image_last_updated = self.coordinator.last_home_update
+            self._schedule_prerender()
 
         super()._handle_coordinator_update()
 
